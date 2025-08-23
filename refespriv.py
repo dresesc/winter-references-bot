@@ -189,17 +189,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ꒰ 𝗧𝗢𝗧𝗔𝗟 𝗥𝗘𝗙𝗘𝗦 ꒱ : {total}  
 ꒰ 𝗧𝗜𝗠𝗘 𝗦𝗘𝗡𝗧 ꒱ : {hora}
 """
-    fotos = obtener_fotos(referencia_id)
 
-    # Enviar cada foto por separado, todas con la caption completa
-    for photo in fotos:
-        await context.bot.send_photo(CHANNEL_ID, photo, caption=texto)
+        for photo in fotos:
+            await context.bot.send_photo(CHANNEL_ID, photo, caption=texto)
+            await asyncio.sleep(0.5)
 
-    await query.edit_message_text(f"referencia aprobada y publicada.")
+        await query.edit_message_text("referencia aprobada y publicada.")
 
     elif action == "rechazar":
         actualizar_estado(referencia_id, "rechazado")
-        await query.edit_message_text(f"referencia rechazada.")
+        await query.edit_message_text("referencia rechazada.")
+
 
 async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
