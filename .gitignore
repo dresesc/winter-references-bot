@@ -1,0 +1,25 @@
+# Archivos de entorno con variables sensibles
+.env
+
+# Entornos virtuales de Python
+venv/
+.env/
+.venv/
+ENV/
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos de distribución / compilación
+*.egg-info/
+build/
+dist/
+
+# Archivos temporales y de sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
