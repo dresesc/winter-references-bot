@@ -50,17 +50,16 @@ def guardar_referencia(media_group_id, caption, user_id, username, name):
     return referencia_id
 
 
-def guardar_foto(referencia_id, file_id):
-    # ahora cada foto tiene su propio status para aprobación individual
+def guardar_foto(referencia_id, file_id, caption=""):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO referencias_fotos (referencia_id, file_id, status)
-        VALUES (%s, %s, 'pendiente')
+        INSERT INTO referencias_fotos (referencia_id, file_id, caption, status)
+        VALUES (%s, %s, %s, 'pendiente')
         RETURNING id;
         """,
-        (referencia_id, file_id),
+        (referencia_id, file_id, caption),
     )
     foto_id = cursor.fetchone()[0]
     conn.commit()
@@ -99,12 +98,12 @@ def obtener_referencia(referencia_id):
 
 def obtener_fotos(referencia_id):
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute(
-        "SELECT id, file_id, status FROM referencias_fotos WHERE referencia_id=%s ORDER BY id ASC",
+        "SELECT id, file_id, caption, status FROM referencias_fotos WHERE referencia_id=%s ORDER BY id ASC",
         (referencia_id,),
     )
-    fotos = cursor.fetchall()  # [(id, file_id, status), ...]
+    fotos = cursor.fetchall()
     cursor.close()
     conn.close()
     return fotos
@@ -113,15 +112,14 @@ def obtener_fotos(referencia_id):
 def obtener_foto(foto_id):
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cursor.execute("SELECT referencia_id, file_id, status FROM referencias_fotos WHERE id=%s", (foto_id,))
+    cursor.execute("SELECT referencia_id, file_id, caption, status FROM referencias_fotos WHERE id=%s", (foto_id,))
     row = cursor.fetchone()
     cursor.close()
     conn.close()
-    return row  # dict con keys: referencia_id, file_id, status
+    return row
 
 
 def total_refes_usuario(user_id):
-    """Cuenta SOLO las fotos aprobadas del usuario (no el estado de la referencia)."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -159,7 +157,6 @@ def ranking_refes():
 
 
 def actualizar_status_global_de_referencia_si_corresponde(referencia_id):
-    """Opcional: actualiza status de la referencia según el estado de sus fotos."""
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -184,9 +181,8 @@ def actualizar_status_global_de_referencia_si_corresponde(referencia_id):
         elif aprobadas == 0 and rechazadas > 0:
             nuevo = 'rechazado'
         else:
-            nuevo = 'mixto'  # hubo aprobadas y rechazadas
+            nuevo = 'mixto'
     else:
-        # todavía hay fotos pendientes
         nuevo = 'pendiente'
 
     cursor.execute("UPDATE referencias SET status=%s WHERE id=%s", (nuevo, referencia_id))
@@ -208,7 +204,6 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     caption = replied.caption or ""
 
-    # Guardar referencia en la DB
     referencia_id = guardar_referencia(
         media_group_id,
         caption,
@@ -217,34 +212,28 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.full_name,
     )
 
-    # Guardar fotos del álbum
     if context.bot_data.get(media_group_id):
-        for file_id in context.bot_data[media_group_id]:
-            guardar_foto(referencia_id, file_id)
+        for file_id, foto_caption in context.bot_data[media_group_id]:
+            guardar_foto(referencia_id, file_id, foto_caption or caption)
     elif replied.photo:
-        guardar_foto(referencia_id, replied.photo[-1].file_id)
+        guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
 
-    # Mensaje al usuario
     await update.message.reply_text("¡gracias por tus referencias! han sido enviadas a revisión.")
 
-    # Obtener todas las fotos de esa referencia
     fotos = obtener_fotos(referencia_id)
-    caption_final = caption.strip() or "sin mensaje."
 
-    # Enviar cada foto por separado al revisor
-    for foto_id, file_id, _status in fotos:
+    for foto in fotos:
+        foto_id, file_id, foto_caption, _status = foto["id"], foto["file_id"], foto["caption"], foto["status"]
         keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}:{foto_id}"),
-                    InlineKeyboardButton("✖️ rechazar", callback_data=f"rechazar:{referencia_id}:{foto_id}"),
-                ]
-            ]
+            [[
+                InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}:{foto_id}"),
+                InlineKeyboardButton("✖️ rechazar", callback_data=f"rechazar:{referencia_id}:{foto_id}"),
+            ]]
         )
         await context.bot.send_photo(
             REVIEWER_ID,
             file_id,
-            caption=f"referencia enviada por @{user.username or user.id}\n\n{caption_final}",
+            caption=f"referencia enviada por @{user.username or user.id}\n\n{foto_caption or caption or 'sin mensaje.'}",
             reply_markup=keyboard,
         )
 
@@ -253,9 +242,10 @@ async def handle_album(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if msg.photo and msg.media_group_id:
         file_id = msg.photo[-1].file_id
+        caption = msg.caption or ""
         if msg.media_group_id not in context.bot_data:
             context.bot_data[msg.media_group_id] = []
-        context.bot_data[msg.media_group_id].append(file_id)
+        context.bot_data[msg.media_group_id].append((file_id, caption))
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -282,21 +272,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if action == "aprobar":
         if estado_actual == 'aprobado':
-            total = total_refes_usuario(ref["user_id"])  # mostrar el total actual igual
+            total = total_refes_usuario(ref["user_id"])
             await query.edit_message_caption(caption=f"ya estaba aprobada. total del usuario: {total}")
             return
 
-        # 1) actualizar solo la foto
         actualizar_estado_foto(foto_id, "aprobado")
-
-        # 2) (opcional) actualizar status global de la referencia
         actualizar_status_global_de_referencia_si_corresponde(referencia_id)
 
-        # 3) calcular total acumulado de fotos aprobadas del usuario
         total = total_refes_usuario(ref["user_id"])
         hora = datetime.now().strftime("%H:%M:%S")
-        caption_channel = ref['caption'].strip() if ref.get('caption') else ''
-        caption_channel = caption_channel or "sin mensaje."
+        caption_channel = foto["caption"] or ref['caption'] or "sin mensaje."
 
         texto = f"""
 𝗪𝗜𝗡𝗧𝗘𝗥 𝗥𝗘𝗙𝗘𝗥𝗘𝗡𝗖𝗘𝗦 
@@ -312,10 +297,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ꒰ 𝗧𝗜𝗠𝗘 𝗦𝗘𝗡𝗧 ꒱ : {hora}
 """
 
-        # 4) publicar la foto al canal
         await context.bot.send_photo(CHANNEL_ID, file_id, caption=texto)
-
-        # 5) confirmar al revisor usando *caption* (no edit_message_text, porque el mensaje es una foto)
         await query.edit_message_caption(caption="referencia aprobada y publicada.")
 
     elif action == "rechazar":
