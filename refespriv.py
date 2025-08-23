@@ -1,55 +1,44 @@
 # librerías.
 import os
-import psycopg2 
+import psycopg2
+import psycopg2.extras
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
 )
-from dotenv import load_dotenv # para cargar variables de entorno localmente
-
-# cargar variables de entorno desde un archivo .env si existe (para desarrollo local)
-load_dotenv()
 
 # =====================
 # CONFIG
 # =====================
-# obtener variables de entorno. render las proporcionará en producción.
-# para desarrollo local, asegúrate de tener un archivo .env con estas variables.
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.getenv("TOKEN")  # token del bot desde variables de entorno
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-REVIEWER_ID = int(os.getenv("REVIEWER_ID")) # Convertir a int
+REVIEWER_ID = int(os.getenv("REVIEWER_ID", "0"))
 
-# DB_CONFIG para PostgreSQL
 DB_CONFIG = {
     'host': os.getenv("DB_HOST"),
+    'dbname': os.getenv("DB_NAME"),
     'user': os.getenv("DB_USER"),
     'password': os.getenv("DB_PASSWORD"),
-    'database': os.getenv("DB_NAME"),
-    'port': os.getenv("DB_PORT", "5432") # Puerto por defecto de PostgreSQL es 5432
+    'port': os.getenv("DB_PORT", "5432")
 }
 
 # =====================
 # DB HELPERS
 # =====================
 def get_db_connection():
-    """Establece y devuelve una conexión a la base de datos PostgreSQL."""
-    try:
-        return psycopg2.connect(**DB_CONFIG)
-    except psycopg2.Error as err:
-        print(f"Error al conectar a la base de datos PostgreSQL: {err}")
-        raise
+    return psycopg2.connect(**DB_CONFIG)
 
 def guardar_referencia(media_group_id, caption, user_id, username, name):
     conn = get_db_connection()
     cursor = conn.cursor()
-    # En PostgreSQL, para obtener el ID insertado, se usa RETURNING id
     cursor.execute("""
         INSERT INTO referencias (media_group_id, caption, user_id, username, name, status)
-        VALUES (%s, %s, %s, %s, %s, 'pendiente') RETURNING id
+        VALUES (%s, %s, %s, %s, %s, 'pendiente')
+        RETURNING id;
     """, (media_group_id, caption, user_id, username, name))
-    referencia_id = cursor.fetchone()[0] # Obtener el ID de la fila insertada
+    referencia_id = cursor.fetchone()[0]
     conn.commit()
     cursor.close()
     conn.close()
@@ -76,14 +65,12 @@ def actualizar_estado(referencia_id, estado):
 
 def obtener_referencia(referencia_id):
     conn = get_db_connection()
-    # Para obtener resultados como diccionario en psycopg2, necesitas un cursor especial
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cursor.execute("SELECT * FROM referencias WHERE id=%s", (referencia_id,))
     ref = cursor.fetchone()
     cursor.close()
     conn.close()
-    # Convertir el DictRow a un diccionario estándar si lo prefieres
-    return dict(ref) if ref else None
+    return ref
 
 def obtener_fotos(referencia_id):
     conn = get_db_connection()
@@ -143,7 +130,6 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.bot_data.get(media_group_id):
         for file_id in context.bot_data[media_group_id]:
             guardar_foto(referencia_id, file_id)
-        del context.bot_data[media_group_id]
     elif replied.photo:
         guardar_foto(referencia_id, replied.photo[-1].file_id)
 
@@ -239,8 +225,6 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        # En PostgreSQL, no se usa SET FOREIGN_KEY_CHECKS.
-        # Para truncar tablas con FK, se usa TRUNCATE TABLE ... RESTART IDENTITY CASCADE;
         cursor.execute("TRUNCATE TABLE referencias_fotos RESTART IDENTITY CASCADE;")
         cursor.execute("TRUNCATE TABLE referencias RESTART IDENTITY CASCADE;")
         conn.commit()
@@ -257,17 +241,8 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =====================
 # MAIN
 # =====================
-async def post_init(application: Application):
-    """Función que se ejecuta después de que la aplicación se inicializa."""
-    if os.getenv("RENDER_EXTERNAL_URL"):
-        webhook_url = os.getenv("RENDER_EXTERNAL_URL") + "/telegram"
-        await application.bot.set_webhook(url=webhook_url)
-        print(f"Webhook configurado en: {webhook_url}")
-    else:
-        print("No se configuró webhook (no en Render o RENDER_EXTERNAL_URL no definida).")
-
 def main():
-    app = Application.builder().token(TOKEN).post_init(post_init).build()
+    app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("winter", winter_command))
     app.add_handler(CommandHandler("refes", refes_command))
@@ -276,18 +251,8 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(CommandHandler("reset", reset))
 
-    if os.getenv("RENDER_EXTERNAL_URL"):
-        port = int(os.getenv("PORT", "8080"))
-        print(f"Iniciando bot con webhooks en el puerto {port}...")
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=port,
-            url_path="/telegram",
-            webhook_url=os.getenv("RENDER_EXTERNAL_URL") + "/telegram"
-        )
-    else:
-        print("Iniciando bot con long polling (desarrollo local)...")
-        app.run_polling(drop_pending_updates=True)
+    print("bot iniciado...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
