@@ -251,8 +251,15 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(CommandHandler("reset", reset))
 
-    print("bot iniciado...")
-    app.run_polling()
+    print("bot iniciado con webhooks...")
+
+    PORT = int(os.getenv("PORT", "8443"))
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=TOKEN,
+        webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    )
 
 if __name__ == "__main__":
     main()
