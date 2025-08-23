@@ -7,7 +7,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMe
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
-import asyncio
 )
 
 # =====================
@@ -142,8 +141,6 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         guardar_foto(referencia_id, replied.photo[-1].file_id)
 
     # Mensaje al usuario con delay
-    await update.message.reply_text("estoy procesando tus imágenes...")
-    await asyncio.sleep(1)
     await update.message.reply_text("¡gracias por tus referencias! han sido enviadas a revisión.")
 
     # Obtener todas las fotos de esa referencia
@@ -163,7 +160,6 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             caption=f"referencia enviada por @{user.username or user.id}\n\n{caption_final}",
             reply_markup=keyboard
         )
-        await asyncio.sleep(0.3)  # pequeño delay para no saturar
 
 async def handle_album(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -205,7 +201,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         for photo in fotos:
             await context.bot.send_photo(CHANNEL_ID, photo, caption=texto)
-            await asyncio.sleep(0.5)
 
         await query.edit_message_text("referencia aprobada y publicada.")
 
