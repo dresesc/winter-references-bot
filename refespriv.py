@@ -84,7 +84,12 @@ def obtener_fotos(referencia_id):
 def total_refes_usuario(user_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM referencias WHERE user_id=%s AND status='aprobado'", (user_id,))
+    cursor.execute("""
+        SELECT COUNT(f.id)
+        FROM referencias r
+        JOIN referencias_fotos f ON r.id = f.referencia_id
+        WHERE r.user_id=%s AND r.status='aprobado'
+    """, (user_id,))
     total = cursor.fetchone()[0]
     cursor.close()
     conn.close()
@@ -94,10 +99,11 @@ def ranking_refes():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT username, COUNT(*) as total
-        FROM referencias
-        WHERE status='aprobado'
-        GROUP BY username
+        SELECT r.username, COUNT(f.id) as total
+        FROM referencias r
+        JOIN referencias_fotos f ON r.id = f.referencia_id
+        WHERE r.status='aprobado'
+        GROUP BY r.username
         ORDER BY total DESC
     """)
     ranking = cursor.fetchall()
@@ -183,15 +189,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ꒰ 𝗧𝗢𝗧𝗔𝗟 𝗥𝗘𝗙𝗘𝗦 ꒱ : {total}  
 ꒰ 𝗧𝗜𝗠𝗘 𝗦𝗘𝗡𝗧 ꒱ : {hora}
 """
-        media = []
-        for i, photo in enumerate(fotos):
-            if i == 0:
-                media.append(InputMediaPhoto(photo, caption=texto))
-            else:
-                media.append(InputMediaPhoto(photo))
+    fotos = obtener_fotos(referencia_id)
 
-        await context.bot.send_media_group(CHANNEL_ID, media)
-        await query.edit_message_text(f"referencia aprobada y publicada.")
+    # Enviar cada foto por separado, todas con la caption completa
+    for photo in fotos:
+        await context.bot.send_photo(CHANNEL_ID, photo, caption=texto)
+
+    await query.edit_message_text(f"referencia aprobada y publicada.")
 
     elif action == "rechazar":
         actualizar_estado(referencia_id, "rechazado")
