@@ -322,15 +322,23 @@ async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def conteo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    # solo el revisor puede usar este comando
+    if user_id != REVIEWER_ID:
+        await update.message.reply_text("no tienes permiso para usar este comando.")
+        return
+
     ranking = ranking_refes()
     if not ranking:
-        await update.message.reply_text("no tienes referencias aprobadas aún.")
+        await update.message.reply_text("no hay referencias registradas aún.")
         return
 
     texto = "𝗧𝗢𝗧𝗔𝗟 𝗥𝗘𝗙𝗘𝗦\n"
     for user, total in ranking:
         texto += f"@{user} : {total} referencias\n"
     await update.message.reply_text(texto)
+
 
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
