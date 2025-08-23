@@ -3,7 +3,7 @@ import os
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
@@ -140,20 +140,19 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif replied.photo:
         guardar_foto(referencia_id, replied.photo[-1].file_id)
 
-    # Mensaje al usuario con delay
+    # Mensaje al usuario
     await update.message.reply_text("¡gracias por tus referencias! han sido enviadas a revisión.")
 
     # Obtener todas las fotos de esa referencia
     fotos = obtener_fotos(referencia_id)
     caption_final = caption if caption.strip() else "sin mensaje."
 
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}"),
-        InlineKeyboardButton("✖️ rechazar", callback_data=f"rechazar:{referencia_id}")
-    ]])
-
     # Enviar cada foto por separado al revisor
     for photo in fotos:
+        keyboard = InlineKeyboardMarkup([[ 
+            InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}:{photo}"),
+            InlineKeyboardButton("✖️ rechazar", callback_data=f"rechazar:{referencia_id}:{photo}")
+        ]])
         await context.bot.send_photo(
             REVIEWER_ID,
             photo,
@@ -172,11 +171,10 @@ async def handle_album(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    action, referencia_id = query.data.split(":")
-    referencia_id = int(referencia_id)
+    parts = query.data.split(":")
+    action, referencia_id, file_id = parts[0], int(parts[1]), parts[2]
 
     ref = obtener_referencia(referencia_id)
-    fotos = obtener_fotos(referencia_id)
 
     if action == "aprobar":
         actualizar_estado(referencia_id, "aprobado")
@@ -199,15 +197,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ꒰ 𝗧𝗜𝗠𝗘 𝗦𝗘𝗡𝗧 ꒱ : {hora}
 """
 
-        for photo in fotos:
-            await context.bot.send_photo(CHANNEL_ID, photo, caption=texto)
-
+        # publicar solo la foto aprobada
+        await context.bot.send_photo(CHANNEL_ID, file_id, caption=texto)
         await query.edit_message_text("referencia aprobada y publicada.")
 
     elif action == "rechazar":
-        actualizar_estado(referencia_id, "rechazado")
         await query.edit_message_text("referencia rechazada.")
-
 
 async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -219,7 +214,7 @@ async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def conteo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ranking = ranking_refes()
     if not ranking:
-        await update.message.reply_text("No hay referencias aprobadas aún.")
+        await update.message.reply_text("no hay referencias aprobadas aún.")
         return
 
     texto = "𝗧𝗢𝗧𝗔𝗟 𝗥𝗘𝗙𝗘𝗦\n"
@@ -275,3 +270,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+# =====================
