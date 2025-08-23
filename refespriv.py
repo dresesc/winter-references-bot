@@ -7,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMe
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, ContextTypes, filters
+import asyncio
 )
 
 # =====================
@@ -122,9 +123,9 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     replied = update.message.reply_to_message
     media_group_id = replied.media_group_id or str(replied.message_id)
     user = update.message.from_user
-
     caption = replied.caption or ""
 
+    # Guardar referencia en la DB
     referencia_id = guardar_referencia(
         media_group_id,
         caption,
@@ -133,24 +134,36 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.full_name
     )
 
+    # Guardar fotos del álbum
     if context.bot_data.get(media_group_id):
         for file_id in context.bot_data[media_group_id]:
             guardar_foto(referencia_id, file_id)
     elif replied.photo:
         guardar_foto(referencia_id, replied.photo[-1].file_id)
 
+    # Mensaje al usuario con delay
     await update.message.reply_text("estoy procesando tus imágenes...")
+    await asyncio.sleep(1)
     await update.message.reply_text("¡gracias por tus referencias! han sido enviadas a revisión.")
 
+    # Obtener todas las fotos de esa referencia
     fotos = obtener_fotos(referencia_id)
-    media = [InputMediaPhoto(photo) for photo in fotos]
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}"),
-         InlineKeyboardButton("✖️ rechazar", callback_data=f"rechazar:{referencia_id}")]
-    ])
-    await context.bot.send_media_group(REVIEWER_ID, media)
-    await context.bot.send_message(REVIEWER_ID, f"referencia enviada por @{user.username or user.id}",
-                                   reply_markup=keyboard)
+    caption_final = caption if caption.strip() else "sin mensaje."
+
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}"),
+        InlineKeyboardButton("✖️ rechazar", callback_data=f"rechazar:{referencia_id}")
+    ]])
+
+    # Enviar cada foto por separado al revisor
+    for photo in fotos:
+        await context.bot.send_photo(
+            REVIEWER_ID,
+            photo,
+            caption=f"referencia enviada por @{user.username or user.id}\n\n{caption_final}",
+            reply_markup=keyboard
+        )
+        await asyncio.sleep(0.3)  # pequeño delay para no saturar
 
 async def handle_album(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
