@@ -27,44 +27,65 @@ DB_CONFIG = {
 # =====================
 # DB HELPERS
 # =====================
+
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
+
 
 def guardar_referencia(media_group_id, caption, user_id, username, name):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT INTO referencias (media_group_id, caption, user_id, username, name, status)
         VALUES (%s, %s, %s, %s, %s, 'pendiente')
         RETURNING id;
-    """, (media_group_id, caption, user_id, username, name))
+        """,
+        (media_group_id, caption, user_id, username, name),
+    )
     referencia_id = cursor.fetchone()[0]
     conn.commit()
     cursor.close()
     conn.close()
     return referencia_id
 
+
 def guardar_foto(referencia_id, file_id):
+    # ahora cada foto tiene su propio status para aprobación individual
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO referencias_fotos (referencia_id, file_id)
-        VALUES (%s, %s)
+    cursor.execute(
+        """
+        INSERT INTO referencias_fotos (referencia_id, file_id, status)
+        VALUES (%s, %s, 'pendiente')
         RETURNING id;
-    """, (referencia_id, file_id))
+        """,
+        (referencia_id, file_id),
+    )
     foto_id = cursor.fetchone()[0]
     conn.commit()
     cursor.close()
     conn.close()
     return foto_id
 
-def actualizar_estado(referencia_id, estado):
+
+def actualizar_estado_referencia(referencia_id, estado):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("UPDATE referencias SET status=%s WHERE id=%s", (estado, referencia_id))
     conn.commit()
     cursor.close()
     conn.close()
+
+
+def actualizar_estado_foto(foto_id, estado):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE referencias_fotos SET status=%s WHERE id=%s", (estado, foto_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
 
 def obtener_referencia(referencia_id):
     conn = get_db_connection()
@@ -75,53 +96,104 @@ def obtener_referencia(referencia_id):
     conn.close()
     return ref
 
+
 def obtener_fotos(referencia_id):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, file_id FROM referencias_fotos WHERE referencia_id=%s", (referencia_id,))
-    fotos = cursor.fetchall()  # [(id, file_id), ...]
+    cursor.execute(
+        "SELECT id, file_id, status FROM referencias_fotos WHERE referencia_id=%s ORDER BY id ASC",
+        (referencia_id,),
+    )
+    fotos = cursor.fetchall()  # [(id, file_id, status), ...]
     cursor.close()
     conn.close()
     return fotos
 
+
 def obtener_foto(foto_id):
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT file_id FROM referencias_fotos WHERE id=%s", (foto_id,))
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT referencia_id, file_id, status FROM referencias_fotos WHERE id=%s", (foto_id,))
     row = cursor.fetchone()
     cursor.close()
     conn.close()
-    return row[0] if row else None
+    return row  # dict con keys: referencia_id, file_id, status
+
 
 def total_refes_usuario(user_id):
+    """Cuenta SOLO las fotos aprobadas del usuario (no el estado de la referencia)."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT COUNT(f.id)
+    cursor.execute(
+        """
+        SELECT COUNT(*)
         FROM referencias r
         JOIN referencias_fotos f ON r.id = f.referencia_id
-        WHERE r.user_id=%s AND r.status='aprobado'
-    """, (user_id,))
+        WHERE r.user_id = %s AND f.status = 'aprobado'
+        """,
+        (user_id,),
+    )
     total = cursor.fetchone()[0]
     cursor.close()
     conn.close()
     return total
 
+
 def ranking_refes():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT r.username, COUNT(f.id) as total
         FROM referencias r
         JOIN referencias_fotos f ON r.id = f.referencia_id
-        WHERE r.status='aprobado'
+        WHERE f.status = 'aprobado'
         GROUP BY r.username
         ORDER BY total DESC
-    """)
+        """
+    )
     ranking = cursor.fetchall()
     cursor.close()
     conn.close()
     return ranking
+
+
+def actualizar_status_global_de_referencia_si_corresponde(referencia_id):
+    """Opcional: actualiza status de la referencia según el estado de sus fotos."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) FROM referencias_fotos WHERE referencia_id=%s AND status='pendiente'",
+        (referencia_id,),
+    )
+    pendientes = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT COUNT(*) FROM referencias_fotos WHERE referencia_id=%s AND status='aprobado'",
+        (referencia_id,),
+    )
+    aprobadas = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT COUNT(*) FROM referencias_fotos WHERE referencia_id=%s AND status='rechazado'",
+        (referencia_id,),
+    )
+    rechazadas = cursor.fetchone()[0]
+
+    if pendientes == 0:
+        if aprobadas > 0 and rechazadas == 0:
+            nuevo = 'aprobado'
+        elif aprobadas == 0 and rechazadas > 0:
+            nuevo = 'rechazado'
+        else:
+            nuevo = 'mixto'  # hubo aprobadas y rechazadas
+    else:
+        # todavía hay fotos pendientes
+        nuevo = 'pendiente'
+
+    cursor.execute("UPDATE referencias SET status=%s WHERE id=%s", (nuevo, referencia_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
 
 # =====================
 # HANDLERS
@@ -142,7 +214,7 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption,
         user.id,
         user.username or "sin_username",
-        user.full_name
+        user.full_name,
     )
 
     # Guardar fotos del álbum
@@ -157,20 +229,25 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Obtener todas las fotos de esa referencia
     fotos = obtener_fotos(referencia_id)
-    caption_final = caption if caption.strip() else "sin mensaje."
+    caption_final = caption.strip() or "sin mensaje."
 
     # Enviar cada foto por separado al revisor
-    for foto_id, file_id in fotos:
-        keyboard = InlineKeyboardMarkup([[ 
-            InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}:{foto_id}"),
-            InlineKeyboardButton("✖️ rechazar", callback_data=f"rechazar:{referencia_id}:{foto_id}")
-        ]])
+    for foto_id, file_id, _status in fotos:
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}:{foto_id}"),
+                    InlineKeyboardButton("✖️ rechazar", callback_data=f"rechazar:{referencia_id}:{foto_id}"),
+                ]
+            ]
+        )
         await context.bot.send_photo(
             REVIEWER_ID,
             file_id,
             caption=f"referencia enviada por @{user.username or user.id}\n\n{caption_final}",
-            reply_markup=keyboard
+            reply_markup=keyboard,
         )
+
 
 async def handle_album(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -180,31 +257,52 @@ async def handle_album(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.bot_data[msg.media_group_id] = []
         context.bot_data[msg.media_group_id].append(file_id)
 
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    action, referencia_id, foto_id = query.data.split(":")
+
+    try:
+        action, referencia_id, foto_id = query.data.split(":")
+    except ValueError:
+        await query.edit_message_caption(caption="formato de callback inválido.")
+        return
+
     referencia_id, foto_id = int(referencia_id), int(foto_id)
 
     ref = obtener_referencia(referencia_id)
-    file_id = obtener_foto(foto_id)
+    foto = obtener_foto(foto_id)
 
-    if not file_id:
-        await query.edit_message_text("no se encontró la imagen.")
+    if not foto:
+        await query.edit_message_caption(caption="no se encontró la imagen.")
         return
 
+    file_id = foto["file_id"]
+    estado_actual = foto["status"]
+
     if action == "aprobar":
-        actualizar_estado(referencia_id, "aprobado")
+        if estado_actual == 'aprobado':
+            total = total_refes_usuario(ref["user_id"])  # mostrar el total actual igual
+            await query.edit_message_caption(caption=f"ya estaba aprobada. total del usuario: {total}")
+            return
+
+        # 1) actualizar solo la foto
+        actualizar_estado_foto(foto_id, "aprobado")
+
+        # 2) (opcional) actualizar status global de la referencia
+        actualizar_status_global_de_referencia_si_corresponde(referencia_id)
+
+        # 3) calcular total acumulado de fotos aprobadas del usuario
         total = total_refes_usuario(ref["user_id"])
         hora = datetime.now().strftime("%H:%M:%S")
-
-        caption = ref['caption'] if ref['caption'] and ref['caption'].strip() else "sin mensaje."
+        caption_channel = ref['caption'].strip() if ref.get('caption') else ''
+        caption_channel = caption_channel or "sin mensaje."
 
         texto = f"""
 𝗪𝗜𝗡𝗧𝗘𝗥 𝗥𝗘𝗙𝗘𝗥𝗘𝗡𝗖𝗘𝗦 
 ‿‿‿‿‿‿‿‿‿‿‿‿‿‿‿ 
 
-꒰ 𝗠𝗘𝗦𝗦𝗔𝗚𝗘 ꒱ : {caption}
+꒰ 𝗠𝗘𝗦𝗦𝗔𝗚𝗘 ꒱ : {caption_channel}
 ꒰ 𝗡𝗔𝗠𝗘 ꒱ : {ref['name']}
 ꒰ 𝗨𝗦𝗘𝗥 ꒱ : @{ref['username']}
 ꒰ 𝗜𝗗 ꒱ : {ref['user_id']}
@@ -214,11 +312,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 ꒰ 𝗧𝗜𝗠𝗘 𝗦𝗘𝗡𝗧 ꒱ : {hora}
 """
 
+        # 4) publicar la foto al canal
         await context.bot.send_photo(CHANNEL_ID, file_id, caption=texto)
-        await query.edit_message_text("referencia aprobada y publicada.")
+
+        # 5) confirmar al revisor usando *caption* (no edit_message_text, porque el mensaje es una foto)
+        await query.edit_message_caption(caption="referencia aprobada y publicada.")
 
     elif action == "rechazar":
-        await query.edit_message_text("referencia rechazada.")
+        if estado_actual == 'rechazado':
+            await query.edit_message_caption(caption="ya estaba rechazada.")
+            return
+
+        actualizar_estado_foto(foto_id, "rechazado")
+        actualizar_status_global_de_referencia_si_corresponde(referencia_id)
+        await query.edit_message_caption(caption="referencia rechazada.")
+
+    else:
+        await query.edit_message_caption(caption="acción no reconocida.")
+
 
 async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -226,6 +337,7 @@ async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🪽 . . . holi {user.full_name}, actualmente llevas un total de {total} referencias aprobadas en 𝘄𝗶𝗻𝘁𝗲𝗿 𝗽𝗿𝗶𝘃."
     )
+
 
 async def conteo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ranking = ranking_refes()
@@ -237,6 +349,7 @@ async def conteo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user, total in ranking:
         texto += f"@{user} : {total} referencias\n"
     await update.message.reply_text(texto)
+
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -261,9 +374,11 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"error al resetear la base de datos: {e}")
 
+
 # =====================
 # MAIN
 # =====================
+
 def main():
     app = Application.builder().token(TOKEN).build()
 
@@ -281,8 +396,10 @@ def main():
         listen="0.0.0.0",
         port=PORT,
         url_path=TOKEN,
-        webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+        webhook_url=f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}",
     )
+
 
 if __name__ == "__main__":
     main()
+# =====================
