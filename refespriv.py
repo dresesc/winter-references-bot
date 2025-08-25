@@ -196,7 +196,7 @@ def actualizar_status_global_de_referencia_si_corresponde(referencia_id):
 # =====================
 async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message:
-        await update.message.reply_text("responde a tus referencias con /winter.")
+        await update.message.reply_text("responde a tus referencias con /winter ❤︎")
         return
 
     replied = update.message.reply_to_message
@@ -218,7 +218,7 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif replied.photo:
         guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
 
-    await update.message.reply_text("¡gracias por tus referencias! han sido enviadas a revisión.")
+    await update.message.reply_text("¡gracias por tus referencias! han sido enviadas a revisión。。。 ♪")
 
     fotos = obtener_fotos(referencia_id)
 
@@ -284,17 +284,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         caption_channel = foto["caption"] or ref['caption'] or "sin mensaje."
 
         texto = f"""
-𝗪𝗜𝗡𝗧𝗘𝗥 𝗥𝗘𝗙𝗘𝗥𝗘𝗡𝗖𝗘𝗦 
+𝓦inter 𝓡eferences 🪽⊹
 ‿‿‿‿‿‿‿‿‿‿‿‿‿‿‿ 
 
-꒰ 𝗠𝗘𝗦𝗦𝗔𝗚𝗘 ꒱ : {caption_channel}
-꒰ 𝗡𝗔𝗠𝗘 ꒱ : {ref['name']}
-꒰ 𝗨𝗦𝗘𝗥 ꒱ : @{ref['username']}
-꒰ 𝗜𝗗 ꒱ : {ref['user_id']}
+♪꒰ 𝗠𝗘𝗦𝗦𝗔𝗚𝗘 : {caption_channel}
+♪꒰ 𝗡𝗔𝗠𝗘 : {ref['name']}
+♪꒰ 𝗨𝗦𝗘𝗥 : @{ref['username']}
+♪꒰ 𝗜𝗗 : {ref['user_id']}
 ‿‿‿‿‿‿‿‿‿‿‿‿‿‿‿
 
-꒰ 𝗧𝗢𝗧𝗔𝗟 𝗥𝗘𝗙𝗘𝗦 ꒱ : {total}  
-꒰ 𝗧𝗜𝗠𝗘 𝗦𝗘𝗡𝗧 ꒱ : {hora}
+♪꒰ 𝗧𝗢𝗧𝗔𝗟 𝗥𝗘𝗙𝗘𝗦 : {total}  
+♪꒰ 𝗧𝗜𝗠𝗘 𝗦𝗘𝗡𝗧 : {hora}
 """
 
         await context.bot.send_photo(CHANNEL_ID, file_id, caption=texto)
@@ -317,7 +317,7 @@ async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     total = total_refes_usuario(user.id)
     await update.message.reply_text(
-        f"🪽 . . . holi {user.full_name}, actualmente llevas un total de {total} referencias aprobadas en 𝘄𝗶𝗻𝘁𝗲𝗿 𝗽𝗿𝗶𝘃."
+        f"🪽 。。。holi {user.full_name}, actualmente llevas un total de {total} referencias aprobadas en 𝔀inter 𝓹riv."
     )
 
 
