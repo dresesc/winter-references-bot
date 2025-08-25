@@ -287,14 +287,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 𝓦inter 𝓡eferences 🪽⊹
 ‿‿‿‿‿‿‿‿‿‿‿‿‿‿‿ 
 
-♪꒰ 𝗠𝗘𝗦𝗦𝗔𝗚𝗘 : {caption_channel}
-♪꒰ 𝗡𝗔𝗠𝗘 : {ref['name']}
-♪꒰ 𝗨𝗦𝗘𝗥 : @{ref['username']}
-♪꒰ 𝗜𝗗 : {ref['user_id']}
+♪꒰ message : {caption_channel}
+♪꒰ name : {ref['name']}
+♪꒰ user : @{ref['username']}
+♪꒰ id : {ref['user_id']}
 ‿‿‿‿‿‿‿‿‿‿‿‿‿‿‿
 
-♪꒰ 𝗧𝗢𝗧𝗔𝗟 𝗥𝗘𝗙𝗘𝗦 : {total}  
-♪꒰ 𝗧𝗜𝗠𝗘 𝗦𝗘𝗡𝗧 : {hora}
+♪꒰ total refes : {total}  
+♪꒰ time sent : {hora}
 """
 
         await context.bot.send_photo(CHANNEL_ID, file_id, caption=texto)
