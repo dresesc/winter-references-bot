@@ -334,7 +334,7 @@ async def conteo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("no hay referencias registradas aún.")
         return
 
-    texto = "𝗧𝗢𝗧𝗔𝗟 𝗥𝗘𝗙𝗘𝗦\n"
+    texto = "𝓣otal 𝓡efes\n"
     for user, total in ranking:
         texto += f"@{user} : {total} referencias\n"
     await update.message.reply_text(texto)
