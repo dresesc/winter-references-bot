@@ -243,9 +243,20 @@ async def handle_album(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if msg.photo and msg.media_group_id:
         file_id = msg.photo[-1].file_id
         caption = msg.caption or ""
+
+        # inicializamos lista del álbum si no existe
         if msg.media_group_id not in context.bot_data:
             context.bot_data[msg.media_group_id] = []
+
         context.bot_data[msg.media_group_id].append((file_id, caption))
+
+        # si este mensaje tiene caption, actualizar todos los anteriores en el álbum
+        if caption:
+            fotos = context.bot_data[msg.media_group_id]
+            context.bot_data[msg.media_group_id] = [
+                (fid, cap or caption) for fid, cap in fotos
+            ]
+
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
