@@ -236,7 +236,7 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await asyncio.sleep(1)
         # segundo mensaje
         await update.message.reply_text(
-            "¡gracias por tus referencia!\n"
+            "¡gracias por tu referencia!\n"
             "ha sido enviada a revisión。。。 ♪"
         )
 
