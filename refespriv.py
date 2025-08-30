@@ -3,6 +3,10 @@ import os
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
+import pytz
+
+COLOMBIA_TZ = pytz.timezone("America/Bogota")
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -291,8 +295,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         actualizar_status_global_de_referencia_si_corresponde(referencia_id)
 
         total = total_refes_usuario(ref["user_id"])
-        hora = datetime.now().strftime("%H:%M:%S")
+        hora = datetime.now(COLOMBIA_TZ).strftime("%H:%M:%S")  # hora de Colombia
         caption_channel = foto["caption"] or ref['caption'] or "sin mensaje."
+
 
         texto = f"""
 𝓦inter 𝓡eferences 🪽⊹
