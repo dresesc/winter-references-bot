@@ -230,24 +230,21 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
 
     if context.bot_data.get(media_group_id):
-    for file_id, foto_caption in context.bot_data[media_group_id]:
+        for file_id, foto_caption in context.bot_data[media_group_id]:
         guardar_foto(referencia_id, file_id, foto_caption or caption)
     # primer mensaje
-    await update.message.reply_text("procesando tus referencias ᶻ 𝗓 𐰁")
-    # esperar 1 segundo
-    await asyncio.sleep(1)
-    # segundo mensaje
-    await update.message.reply_text(
+        await update.message.reply_text("procesando tus referencias ᶻ 𝗓 𐰁")
+        await asyncio.sleep(1)
+        await update.message.reply_text(
         "¡gracias por tus referencias!\n"
         "han sido enviadas a revisión。。。 ♪"
     )
     elif replied.photo:
     guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
     # primer mensaje
-    await update.message.reply_text("procesando tu referencia ᶻ 𝗓 𐰁")
-    await asyncio.sleep(1)
-    # segundo mensaje
-    await update.message.reply_text(
+        await update.message.reply_text("procesando tu referencia ᶻ 𝗓 𐰁")
+        await asyncio.sleep(1)
+        await update.message.reply_text(
         "¡gracias por tus referencia!\n"
         "ha sido enviada a revisión。。。 ♪"
     )
