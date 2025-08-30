@@ -4,6 +4,7 @@ import psycopg2
 import psycopg2.extras
 from datetime import datetime
 import pytz
+import asyncio
 
 COLOMBIA_TZ = pytz.timezone("America/Bogota")
 
@@ -35,14 +36,13 @@ DB_CONFIG = {
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
 
-
 def guardar_referencia(media_group_id, caption, user_id, username, name):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO referencias (media_group_id, caption, user_id, username, name, status)
-        VALUES (%s, %s, %s, %s, %s, 'pendiente')
+        INSERT INTO referencias (media_group_id, caption, user_id, username, name, status, created_at)
+        VALUES (%s, %s, %s, %s, %s, 'pendiente', NOW())
         RETURNING id;
         """,
         (media_group_id, caption, user_id, username, name),
@@ -52,7 +52,6 @@ def guardar_referencia(media_group_id, caption, user_id, username, name):
     cursor.close()
     conn.close()
     return referencia_id
-
 
 def guardar_foto(referencia_id, file_id, caption=""):
     conn = get_db_connection()
@@ -205,7 +204,15 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     replied = update.message.reply_to_message
     media_group_id = replied.media_group_id or str(replied.message_id)
-    user = update.message.from_user
+    author = replied.from_user  
+    referencia_id = guardar_referencia(
+    media_group_id,
+    caption,
+    author.id,
+    author.username or "sin_username",
+    author.full_name,
+)
+
     caption = replied.caption or ""
 
     referencia_id = guardar_referencia(
@@ -222,7 +229,29 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif replied.photo:
         guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
 
-    await update.message.reply_text("¡gracias por tus referencias!\n" "han sido enviadas a revisión。。。 ♪")
+    if context.bot_data.get(media_group_id):
+    for file_id, foto_caption in context.bot_data[media_group_id]:
+        guardar_foto(referencia_id, file_id, foto_caption or caption)
+    # primer mensaje
+    await update.message.reply_text("procesando tus referencias ᶻ 𝗓 𐰁")
+    # esperar 1 segundo
+    await asyncio.sleep(1)
+    # segundo mensaje
+    await update.message.reply_text(
+        "¡gracias por tus referencias!\n"
+        "han sido enviadas a revisión。。。 ♪"
+    )
+    elif replied.photo:
+    guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
+    # primer mensaje
+    await update.message.reply_text("procesando tu referencia ᶻ 𝗓 𐰁")
+    await asyncio.sleep(1)
+    # segundo mensaje
+    await update.message.reply_text(
+        "¡gracias por tus referencia!\n"
+        "ha sido enviada a revisión。。。 ♪"
+    )
+
 
     fotos = obtener_fotos(referencia_id)
 
@@ -295,7 +324,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         actualizar_status_global_de_referencia_si_corresponde(referencia_id)
 
         total = total_refes_usuario(ref["user_id"])
-        hora = datetime.now(COLOMBIA_TZ).strftime("%H:%M:%S")  # hora de Colombia
+        hora = ref['created_at'].astimezone(COLOMBIA_TZ).strftime("%H:%M:%S")
         caption_channel = foto["caption"] or ref['caption'] or "sin mensaje."
 
 
