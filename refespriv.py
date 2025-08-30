@@ -197,6 +197,7 @@ def actualizar_status_global_de_referencia_si_corresponde(referencia_id):
 # =====================
 # HANDLERS
 # =====================
+
 async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message:
         await update.message.reply_text("responde a tus referencias con /winter. ❤︎")
@@ -204,56 +205,50 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     replied = update.message.reply_to_message
     media_group_id = replied.media_group_id or str(replied.message_id)
-    author = replied.from_user  
-    referencia_id = guardar_referencia(
-    media_group_id,
-    caption,
-    author.id,
-    author.username or "sin_username",
-    author.full_name,
-)
-
+    author = replied.from_user
     caption = replied.caption or ""
 
+    # guardar referencia con usuario A (autor del mensaje original)
     referencia_id = guardar_referencia(
         media_group_id,
         caption,
-        user.id,
-        user.username or "sin_username",
-        user.full_name,
+        author.id,
+        author.username or "sin_username",
+        author.full_name,
     )
 
-    if context.bot_data.get(media_group_id):
+    # manejar álbum o foto única
+    if context.bot_data.get(media_group_id):  # álbum
         for file_id, foto_caption in context.bot_data[media_group_id]:
             guardar_foto(referencia_id, file_id, foto_caption or caption)
-    elif replied.photo:
-        guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
-
-    if context.bot_data.get(media_group_id):
-        for file_id, foto_caption in context.bot_data[media_group_id]:
-        guardar_foto(referencia_id, file_id, foto_caption or caption)
-    # primer mensaje
+        # primer mensaje
         await update.message.reply_text("procesando tus referencias ᶻ 𝗓 𐰁")
         await asyncio.sleep(1)
+        # segundo mensaje
         await update.message.reply_text(
-        "¡gracias por tus referencias!\n"
-        "han sido enviadas a revisión。。。 ♪"
-    )
-    elif replied.photo:
-    guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
-    # primer mensaje
+            "¡gracias por tus referencias!\n"
+            "han sido enviadas a revisión。。。 ♪"
+        )
+    elif replied.photo:  # foto única
+        guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
+        # primer mensaje
         await update.message.reply_text("procesando tu referencia ᶻ 𝗓 𐰁")
         await asyncio.sleep(1)
+        # segundo mensaje
         await update.message.reply_text(
-        "¡gracias por tus referencia!\n"
-        "ha sido enviada a revisión。。。 ♪"
-    )
+            "¡gracias por tus referencia!\n"
+            "ha sido enviada a revisión。。。 ♪"
+        )
 
-
+    # enviar al revisor
     fotos = obtener_fotos(referencia_id)
-
     for foto in fotos:
-        foto_id, file_id, foto_caption, _status = foto["id"], foto["file_id"], foto["caption"], foto["status"]
+        foto_id, file_id, foto_caption, _status = (
+            foto["id"],
+            foto["file_id"],
+            foto["caption"],
+            foto["status"],
+        )
         keyboard = InlineKeyboardMarkup(
             [[
                 InlineKeyboardButton("✔️ aprobar", callback_data=f"aprobar:{referencia_id}:{foto_id}"),
@@ -263,9 +258,10 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_photo(
             REVIEWER_ID,
             file_id,
-            caption=f"referencia enviada por @{user.username or user.id}\n\n{foto_caption or caption or 'sin mensaje.'}",
+            caption=f"referencia enviada por @{author.username or author.id}\n\n{foto_caption or caption or 'sin mensaje.'}",
             reply_markup=keyboard,
         )
+
 
 
 async def handle_album(update: Update, context: ContextTypes.DEFAULT_TYPE):
