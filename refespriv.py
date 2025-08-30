@@ -200,7 +200,7 @@ def actualizar_status_global_de_referencia_si_corresponde(referencia_id):
 # =====================
 async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message:
-        await update.message.reply_text("responde a tus referencias con /winter ❤︎")
+        await update.message.reply_text("responde a tus referencias con /winter. ❤︎")
         return
 
     replied = update.message.reply_to_message
@@ -222,7 +222,7 @@ async def winter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif replied.photo:
         guardar_foto(referencia_id, replied.photo[-1].file_id, caption)
 
-    await update.message.reply_text("¡gracias por tus referencias! han sido enviadas a revisión。。。 ♪")
+    await update.message.reply_text("¡gracias por tus referencias!\n" "han sido enviadas a revisión。。。 ♪")
 
     fotos = obtener_fotos(referencia_id)
 
@@ -333,7 +333,8 @@ async def refes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     total = total_refes_usuario(user.id)
     await update.message.reply_text(
-        f"🪽 。。。holi {user.full_name}, actualmente llevas un total de {total} referencias aprobadas en 𝔀inter 𝓹riv."
+        f"🪽 。。。¡holi, {user.full_name}!\n\n"
+        f"actualmente llevas un total de {total} referencias aprobadas en 𝔀inter 𝓹riv. ✧˚｡"
     )
 
 
